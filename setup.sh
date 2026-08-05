@@ -239,7 +239,20 @@ paso_7_verilog_a() {
     else
         warn "No se encontro psp103_nqs.osdi. Los MOSFET no van a simular."
     fi
-    [ -f "$HOME/.spiceinit" ] && ok ".spiceinit enlazado en el home."
+
+    # .spiceinit permite simular circuitos del PDK desde cualquier directorio.
+    # OJO: hay varios .spiceinit en el PDK (tests de gnucap, etc). El bueno es
+    # el de libs.tech/ngspice, que es el que indica la documentacion del IHP.
+    local si="$PDK_ROOT/$PDK/libs.tech/ngspice/.spiceinit"
+    if [ -f "$si" ]; then
+        ln -sf "$si" "$HOME/.spiceinit"
+        ok ".spiceinit enlazado desde $si"
+    else
+        warn "No se encontro $si"
+        warn "Vas a poder simular solo desde la carpeta que contenga los .osdi."
+    fi
+
+    return 0   # sin esto, el ultimo test define el codigo de salida de la funcion
 }
 
 # =============================================================================
@@ -249,7 +262,9 @@ verificar() {
     [ -f "$ENV_FILE" ] && . "$ENV_FILE"
 
     local fallos=0
-    for t in git python3 ngspice klayout xschem magic netgen openvaf; do
+    # OJO: el paquete netgen-lvs instala el binario como 'netgen-lvs',
+    # no como 'netgen' (ese nombre lo ocupa el mallador de elementos finitos).
+    for t in git python3 ngspice klayout xschem magic netgen-lvs openvaf; do
         if command -v "$t" >/dev/null 2>&1; then
             printf "  %-10s %s\n" "$t" "$(command -v "$t")"
         else
