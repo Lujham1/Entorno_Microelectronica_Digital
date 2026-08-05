@@ -21,4 +21,4 @@ Esta sección provee comandos únicos para instalar dependencias, clonar el repo
 Abre **PowerShell como Administrador** y pega este único comando — instalará WSL + Ubuntu y configurará todo el entorno de diseño automáticamente:
 
 ```powershell
-irm [https://raw.githubusercontent.com/Lujham1/Entorno_Microelectronica_Digital/refs/heads/main/install-wsl.ps1](https://raw.githubusercontent.com/Lujham1/Entorno_Microelectronica_Digital/refs/heads/main/install-wsl.ps1) | iex
+irm https://raw.githubusercontent.com/Lujham1/Entorno_Microelectronica_Digital/refs/heads/main/install-wsl.ps1 | iex
