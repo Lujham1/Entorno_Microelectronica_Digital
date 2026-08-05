@@ -30,33 +30,44 @@ cd xschem
 make -j$(nproc)
 sudo make install
 
-# 4. Descarga del PDK IHP SG13G2 (Open PDK)
-echo "[4/6] Descargando IHP SG13G2 Open PDK..."
-mkdir -p ~/pdk
-cd ~/pdk
-if [ ! -d "openPDK" ]; then
-    git clone https://github.com/IHP-microelectronics/openPDK.git
-fi
+echo "=========================================="
+echo " [4/6] Descargando IHP SG13G2 Open PDK... "
+echo "=========================================="
+cd $HOME
+# Borramos la carpeta si ya existe para evitar errores si un alumno reinstala
+rm -rf $HOME/IHP-Open-PDK
+# Clonado exacto como pide la documentación oficial
+git clone --branch dev --recurse-submodules https://github.com/IHP-GmbH/IHP-Open-PDK.git
 
-# 5. Configuración de KLayout para DRC y LVS (IHP SG13G2)
-echo "[5/6] Configurando DRC y LVS en KLayout..."
-# KLayout usa la carpeta 'salt' para cargar paquetes y tecnologías de forma nativa
-mkdir -p ~/.klayout/salt
-# Creamos un enlace simbólico desde el PDK hacia KLayout
-ln -sfn ~/pdk/openPDK/ihp-sg13g2/libs.tech/klayout ~/.klayout/salt/ihp-sg13g2
 
-# 6. Configuración del entorno de Xschem y variables
-echo "[6/6] Configurando Xschem y variables de entorno..."
-mkdir -p ~/.xschem
-cp ~/pdk/openPDK/ihp-sg13g2/libs.tech/xschem/xschemrc ~/.xschem/
+echo "=========================================="
+echo " [5/6] Configurando variables de entorno  "
+echo "=========================================="
+# Inyectamos las rutas directamente en el .bashrc del alumno
+echo 'export PDK_ROOT=$HOME/IHP-Open-PDK' >> ~/.bashrc
+echo 'export PDK=ihp-sg13g2' >> ~/.bashrc
+echo 'export KLAYOUT_PATH=$HOME/.klayout:$PDK_ROOT/$PDK/libs.tech/klayout' >> ~/.bashrc
+echo 'export KLAYOUT_HOME=$HOME/.klayout' >> ~/.bashrc
 
-# Exportar PDK_ROOT en el bashrc para que las herramientas lo encuentren
-if ! grep -q "PDK_ROOT" ~/.bashrc; then
-    echo 'export PDK_ROOT=$HOME/pdk/openPDK' >> ~/.bashrc
-    echo 'export IHP_TECH_DIR=$PDK_ROOT/ihp-sg13g2' >> ~/.bashrc
-fi
 
-echo "========================================"
-echo " ¡Instalación completada con éxito!     "
-echo " Cierra esta terminal y abre una nueva. "
-echo "========================================"
+echo "=========================================="
+echo " [6/6] Instalando dependencias Python y   "
+echo "       compilando modelos Verilog-A       "
+echo "=========================================="
+# Aseguramos que tengan pip instalado
+sudo apt-get install python3-pip -y
+
+# Instalamos los paquetes de Python que pide KLayout/IHP
+# (El flag --break-system-packages es un salvavidas si usan Ubuntu 24.04)
+pip3 install -r $HOME/IHP-Open-PDK/requirements.txt --break-system-packages
+
+# Navegamos a la carpeta de Verilog-A y compilamos los modelos para NGSpice
+cd $HOME/IHP-Open-PDK/ihp-sg13g2/libs.tech/verilog-a
+chmod +x openvaf-compile-va.sh
+./openvaf-compile-va.sh
+
+echo "=========================================="
+echo " ¡Entorno VLSI configurado con éxito! 🎉  "
+echo "=========================================="
+echo "Por favor, CIERRA esta ventana de terminal y vuelve a abrirla "
+echo "para que se apliquen las nuevas variables de entorno."
