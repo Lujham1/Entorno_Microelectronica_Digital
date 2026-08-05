@@ -97,6 +97,39 @@ if ($instaladas -contains $DistroName) {
     Write-Host "Distro previa eliminada."
 }
 
+# --- [2b] Blindaje contra cloud-init ajeno -----------------------------------
+# Ubuntu para WSL lee %USERPROFILE%\.cloud-init\ y aplica esa configuracion a
+# CADA instancia nueva. Un default.user-data dejado por otro instalador se cuela
+# en nuestra distro aunque el sistema este limpio (usuario ajeno, contenedores,
+# PATH contaminado). Como cloud-init da prioridad al archivo mas especifico,
+# escribimos uno con el nombre exacto de la instancia: ese gana siempre.
+Write-Paso "2b" "Neutralizando configuracion cloud-init previa"
+
+$ciDir = Join-Path $env:USERPROFILE '.cloud-init'
+New-Item -ItemType Directory -Force -Path $ciDir | Out-Null
+
+$ajenos = @(Get-ChildItem $ciDir -Filter '*.user-data' -ErrorAction SilentlyContinue |
+            Where-Object { $_.Name -ne "$DistroName.user-data" })
+
+if ($ajenos.Count -gt 0) {
+    Write-Host "Se detecto configuracion cloud-init de otra instalacion:" -ForegroundColor Yellow
+    $ajenos | ForEach-Object { Write-Host "   - $($_.Name)" -ForegroundColor Yellow }
+    Write-Host "No se borra (puede pertenecer a otra materia), pero queda anulada" -ForegroundColor Yellow
+    Write-Host "para esta distro mediante un perfil propio." -ForegroundColor Yellow
+} else {
+    Write-Host "No hay configuracion cloud-init previa."
+}
+
+$ciFile = Join-Path $ciDir "$DistroName.user-data"
+$ciBody = @"
+#cloud-config
+# Perfil minimo para la distro '$DistroName'.
+# Existe unicamente para tener prioridad sobre cualquier default.user-data
+# global y garantizar que esta instancia arranque virgen.
+"@
+Set-Content -Path $ciFile -Value $ciBody -Encoding UTF8
+Write-Host "Perfil propio escrito en: $ciFile"
+
 # --- [3] Instalar la distro --------------------------------------------------
 Write-Paso 3 "Instalando $DistroBase como '$DistroName'"
 
