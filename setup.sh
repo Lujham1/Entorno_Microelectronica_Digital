@@ -15,7 +15,8 @@
 set -uo pipefail   # NO usamos -e: cada paso maneja su propio error
 
 # --- Configuracion -----------------------------------------------------------
-KLAYOUT_VER="0.29.11"          # verifica la ultima en https://www.klayout.de/build.html
+KLAYOUT_VER="0.30.10"          # verifica la ultima en https://www.klayout.de/build.html
+KLAYOUT_MD5="674a26b464841ac7385dec3cc47c2c60"   # MD5 del .deb de Ubuntu-24
 PDK_DIR="$HOME/IHP-Open-PDK"
 XSCHEM_DIR="$HOME/src/xschem"
 ENV_FILE="/etc/profile.d/vlsi-env.sh"
@@ -101,6 +102,12 @@ paso_3_klayout() {
     cd /tmp || return 1
     echo "Intentando el .deb oficial: $url"
     if wget -q --show-progress "$url" -O "$deb"; then
+        local md5
+        md5=$(md5sum "$deb" | cut -d' ' -f1)
+        if [ "$md5" != "$KLAYOUT_MD5" ]; then
+            warn "MD5 no coincide (esperado $KLAYOUT_MD5, obtenido $md5)."
+            warn "Puede ser una descarga corrupta o una version distinta."
+        fi
         sudo apt-get install -y "/tmp/$deb" && ok "KLayout $KLAYOUT_VER instalado." && return 0
         warn "El .deb no se pudo instalar."
     else
