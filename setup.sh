@@ -151,19 +151,25 @@ paso_5_openvaf() {
         return 0
     fi
 
-    echo "OpenVAF no esta instalado."
-    echo
-    warn "Este es el UNICO paso que puede necesitar intervencion manual."
-    echo "  1. Entra a  https://openvaf.semimod.de/  (seccion Download)"
-    echo "  2. Baja el binario para Linux x86_64"
-    echo "  3. Descomprimilo y copialo:   sudo cp openvaf /usr/local/bin/"
-    echo "  4. Dale permisos:             sudo chmod +x /usr/local/bin/openvaf"
-    echo "  5. Volve a correr:            ./setup.sh 5"
-    echo
-    warn "Sin OpenVAF el paso 7 no puede compilar los modelos del PDK."
-    return 1
-}
+    local url="https://github.com/Lujham1/Entorno_Microelectronica_Digital/releases/download/v1.0/openvaf_23_5_0_linux_amd64.tar.gz"
+    local tmp="/tmp/openvaf_dl"
 
+    rm -rf "$tmp" && mkdir -p "$tmp" && cd "$tmp" || return 1
+    echo "Descargando OpenVAF 23.5.0 (55 MB)..."
+    wget -q --show-progress "$url" -O openvaf.tar.gz \
+        || { err "Fallo la descarga de OpenVAF."; return 1; }
+
+    tar xzf openvaf.tar.gz || { err "El archivo esta corrupto."; return 1; }
+
+    local bin
+    bin=$(find "$tmp" -name openvaf -type f | head -1)
+    [ -n "$bin" ] || { err "No se encontro el binario dentro del tar."; return 1; }
+
+    sudo install -m 755 "$bin" /usr/local/bin/openvaf || return 1
+    rm -rf "$tmp"
+
+    ok "OpenVAF instalado: $(openvaf --version 2>&1 | head -1)"
+}
 # =============================================================================
 paso_6_pdk() {
     paso 6 "IHP SG13G2 Open PDK"
