@@ -1,73 +1,295 @@
-#!/bin/bash
-set -e # Detiene el script si ocurre algún error
+#!/usr/bin/env bash
+# =============================================================================
+#  Entorno VLSI - Microelectronica Digital
+#  Ubuntu 24.04 LTS (noble) - instalacion NATIVA (sin docker/podman/distrobox)
+# -----------------------------------------------------------------------------
+#  Herramientas: KLayout, Xschem, NGSpice, Magic, Netgen, OpenVAF, IHP SG13G2
+#
+#  Uso:
+#     ./setup.sh          -> corre todos los pasos
+#     ./setup.sh 3        -> corre SOLO el paso 3
+#     ./setup.sh 3 6      -> corre los pasos 3 al 6
+#     ./setup.sh verify   -> solo verifica que todo este bien instalado
+# =============================================================================
 
-echo "========================================"
-echo " Iniciando instalación del entorno VLSI "
-echo "========================================"
+set -uo pipefail   # NO usamos -e: cada paso maneja su propio error
 
-# 1. Actualizar sistema e instalar dependencias
-echo "[1/6] Instalando dependencias del sistema..."
-sudo apt-get update -y
-sudo apt-get upgrade -y
-sudo apt-get install -y build-essential git python3 python3-pip \
-    libx11-6 libx11-dev libxrender1 libxrender-dev \
-    libxcb1 libx11-xcb-dev libcairo2 libcairo2-dev \
-    tcl8.6 tcl8.6-dev tk8.6 tk8.6-dev flex bison \
-    libxpm4 libxpm-dev gawk wget curl magic netgen
+# --- Configuracion -----------------------------------------------------------
+KLAYOUT_VER="0.29.11"          # verifica la ultima en https://www.klayout.de/build.html
+PDK_DIR="$HOME/IHP-Open-PDK"
+XSCHEM_DIR="$HOME/src/xschem"
+ENV_FILE="/etc/profile.d/vlsi-env.sh"
 
-# 2. Instalación de simulador (Ngspice) y KLayout
-echo "[2/6] Instalando Ngspice y KLayout..."
-sudo apt-get install -y ngspice klayout
+# --- Colores y helpers -------------------------------------------------------
+RED=$'\033[0;31m'; GRN=$'\033[0;32m'; YEL=$'\033[1;33m'; CYA=$'\033[0;36m'; RST=$'\033[0m'
 
-# 3. Compilación e instalación de Xschem
-echo "[3/6] Instalando Xschem desde el código fuente..."
-cd ~
-if [ ! -d "xschem" ]; then
-    git clone https://github.com/StefanSchippers/xschem.git
-fi
-cd xschem
-./configure
-make -j$(nproc)
-sudo make install
+paso()  { echo; echo "${CYA}==========================================${RST}";
+          echo "${CYA} [$1] $2${RST}";
+          echo "${CYA}==========================================${RST}"; }
+ok()    { echo "${GRN}  OK  ${RST} $*"; }
+warn()  { echo "${YEL} AVISO${RST} $*"; }
+err()   { echo "${RED}ERROR ${RST} $*"; }
 
-echo "=========================================="
-echo " [4/6] Descargando IHP SG13G2 Open PDK... "
-echo "=========================================="
-cd $HOME
-# Borramos la carpeta si ya existe para evitar errores si un alumno reinstala
-rm -rf $HOME/IHP-Open-PDK
-# Clonado exacto como pide la documentación oficial
-git clone --branch dev --recurse-submodules https://github.com/IHP-GmbH/IHP-Open-PDK.git
+# =============================================================================
+paso_0_chequeos() {
+    paso 0 "Chequeos previos"
 
+    if [ -f /etc/os-release ]; then
+        . /etc/os-release
+        echo "Sistema: $PRETTY_NAME"
+        [ "${VERSION_ID:-}" = "24.04" ] || warn "Este script esta pensado para Ubuntu 24.04."
+    fi
 
-echo "=========================================="
-echo " [5/6] Configurando variables de entorno  "
-echo "=========================================="
-# Inyectamos las rutas directamente en el .bashrc del alumno
-echo 'export PDK_ROOT=$HOME/IHP-Open-PDK' >> ~/.bashrc
-echo 'export PDK=ihp-sg13g2' >> ~/.bashrc
-echo 'export KLAYOUT_PATH=$HOME/.klayout:$PDK_ROOT/$PDK/libs.tech/klayout' >> ~/.bashrc
-echo 'export KLAYOUT_HOME=$HOME/.klayout' >> ~/.bashrc
+    echo "Distro WSL: ${WSL_DISTRO_NAME:-(no es WSL)}"
+    echo "Usuario:    $(whoami)"
+    echo "Home:       $HOME"
 
+    if [ -d /foss ] || command -v distrobox >/dev/null 2>&1; then
+        err "Se detecto un entorno previo (/foss o distrobox)."
+        err "Estas en una instalacion contaminada. Salí y usá una distro limpia."
+        return 1
+    fi
+    ok "Entorno limpio."
 
-echo "=========================================="
-echo " [6/6] Instalando dependencias Python y   "
-echo "       compilando modelos Verilog-A       "
-echo "=========================================="
-# Aseguramos que tengan pip instalado
-sudo apt-get install python3-pip -y
+    sudo -v || { err "Se necesita sudo."; return 1; }
+    ok "sudo disponible."
+}
 
-# Instalamos los paquetes de Python que pide KLayout/IHP
-# (El flag --break-system-packages es un salvavidas si usan Ubuntu 24.04)
-pip3 install -r $HOME/IHP-Open-PDK/requirements.txt --break-system-packages
+# =============================================================================
+paso_1_dependencias() {
+    paso 1 "Dependencias del sistema"
 
-# Navegamos a la carpeta de Verilog-A y compilamos los modelos para NGSpice
-cd $HOME/IHP-Open-PDK/ihp-sg13g2/libs.tech/verilog-a
-chmod +x openvaf-compile-va.sh
-./openvaf-compile-va.sh
+    sudo apt-get update -y
+    sudo apt-get upgrade -y
 
-echo "=========================================="
-echo " ¡Entorno VLSI configurado con éxito! 🎉  "
-echo "=========================================="
-echo "Por favor, CIERRA esta ventana de terminal y vuelve a abrirla "
-echo "para que se apliquen las nuevas variables de entorno."
+    sudo apt-get install -y \
+        build-essential git wget curl unzip pkg-config \
+        python3 python3-pip python3-venv \
+        libx11-6 libx11-dev libxrender1 libxrender-dev \
+        libxcb1 libx11-xcb-dev libxpm4 libxpm-dev \
+        libcairo2 libcairo2-dev \
+        tcl8.6 tcl8.6-dev tk8.6 tk8.6-dev \
+        flex bison gawk xterm x11-apps \
+    || { err "Fallo apt-get install."; return 1; }
+
+    ok "Dependencias instaladas."
+}
+
+# =============================================================================
+paso_2_simuladores() {
+    paso 2 "NGSpice, Magic y Netgen"
+
+    # OJO: en Ubuntu el paquete 'netgen' es un mallador de elementos finitos.
+    # La herramienta de LVS es 'netgen-lvs'.
+    sudo apt-get install -y ngspice magic netgen-lvs \
+        || { err "Fallo la instalacion de simuladores."; return 1; }
+
+    local nv
+    nv=$(ngspice --version 2>/dev/null | head -1)
+    echo "NGSpice: $nv"
+    # OSDI (necesario para los modelos Verilog-A del PDK) existe desde ngspice 39
+    ok "NGSpice, Magic y Netgen-LVS instalados."
+}
+
+# =============================================================================
+paso_3_klayout() {
+    paso 3 "KLayout"
+
+    local deb="klayout_${KLAYOUT_VER}-1_amd64.deb"
+    local url="https://www.klayout.org/downloads/Ubuntu-24/${deb}"
+
+    cd /tmp || return 1
+    echo "Intentando el .deb oficial: $url"
+    if wget -q --show-progress "$url" -O "$deb"; then
+        sudo apt-get install -y "/tmp/$deb" && ok "KLayout $KLAYOUT_VER instalado." && return 0
+        warn "El .deb no se pudo instalar."
+    else
+        warn "No se pudo descargar el .deb (¿cambio la version?)."
+        warn "Revisa https://www.klayout.de/build.html y ajusta KLAYOUT_VER."
+    fi
+
+    warn "Cayendo al paquete de Ubuntu (puede ser mas viejo)."
+    sudo apt-get install -y klayout || { err "No se pudo instalar KLayout."; return 1; }
+    ok "KLayout (repo Ubuntu) instalado."
+}
+
+# =============================================================================
+paso_4_xschem() {
+    paso 4 "Xschem (compilado desde fuente)"
+
+    mkdir -p "$(dirname "$XSCHEM_DIR")"
+    if [ -d "$XSCHEM_DIR/.git" ]; then
+        echo "Repo existente, actualizando..."
+        git -C "$XSCHEM_DIR" pull --ff-only || warn "No se pudo actualizar, sigo con lo que hay."
+    else
+        rm -rf "$XSCHEM_DIR"
+        git clone https://github.com/StefanSchippers/xschem.git "$XSCHEM_DIR" \
+            || { err "Fallo el clone de Xschem."; return 1; }
+    fi
+
+    cd "$XSCHEM_DIR" || return 1
+    ./configure          || { err "Fallo ./configure (revisa las dependencias del paso 1)."; return 1; }
+    make -j"$(nproc)"    || { err "Fallo la compilacion de Xschem."; return 1; }
+    sudo make install    || { err "Fallo make install."; return 1; }
+
+    ok "Xschem instalado en $(command -v xschem)"
+}
+
+# =============================================================================
+paso_5_openvaf() {
+    paso 5 "OpenVAF (compilador Verilog-A)"
+
+    if command -v openvaf >/dev/null 2>&1; then
+        ok "OpenVAF ya presente: $(command -v openvaf)"
+        return 0
+    fi
+
+    echo "OpenVAF no esta instalado."
+    echo
+    warn "Este es el UNICO paso que puede necesitar intervencion manual."
+    echo "  1. Entra a  https://openvaf.semimod.de/  (seccion Download)"
+    echo "  2. Baja el binario para Linux x86_64"
+    echo "  3. Descomprimilo y copialo:   sudo cp openvaf /usr/local/bin/"
+    echo "  4. Dale permisos:             sudo chmod +x /usr/local/bin/openvaf"
+    echo "  5. Volve a correr:            ./setup.sh 5"
+    echo
+    warn "Sin OpenVAF el paso 7 no puede compilar los modelos del PDK."
+    return 1
+}
+
+# =============================================================================
+paso_6_pdk() {
+    paso 6 "IHP SG13G2 Open PDK"
+
+    if [ -d "$PDK_DIR/.git" ]; then
+        echo "PDK existente, actualizando..."
+        git -C "$PDK_DIR" pull --ff-only || warn "No se pudo actualizar."
+        git -C "$PDK_DIR" submodule update --init --recursive
+    else
+        rm -rf "$PDK_DIR"
+        git clone --branch dev --recurse-submodules \
+            https://github.com/IHP-GmbH/IHP-Open-PDK.git "$PDK_DIR" \
+            || { err "Fallo el clone del PDK."; return 1; }
+    fi
+    ok "PDK en $PDK_DIR (branch dev)"
+
+    # --- Variables de entorno, en /etc/profile.d para no duplicar en .bashrc ---
+    echo "Escribiendo $ENV_FILE ..."
+    sudo tee "$ENV_FILE" > /dev/null <<'EOF'
+# Entorno VLSI - Microelectronica Digital
+export PDK_ROOT="$HOME/IHP-Open-PDK"
+export PDK="ihp-sg13g2"
+export KLAYOUT_HOME="$HOME/.klayout"
+export KLAYOUT_PATH="$HOME/.klayout:$PDK_ROOT/$PDK/libs.tech/klayout"
+EOF
+    sudo chmod 644 "$ENV_FILE"
+    ok "Variables en $ENV_FILE (se aplican en cada login, sin duplicarse)."
+
+    # cargarlas en esta misma sesion
+    # shellcheck source=/dev/null
+    . "$ENV_FILE"
+
+    # --- Configuracion de Xschem ---
+    local xrc="$PDK_ROOT/$PDK/libs.tech/xschem/xschemrc"
+    if [ -f "$xrc" ]; then
+        mkdir -p "$HOME/.xschem"
+        ln -sf "$xrc" "$HOME/.xschem/xschemrc"
+        ok "Xschem enlazado al xschemrc del PDK."
+    else
+        warn "No se encontro $xrc"
+    fi
+
+    # --- Dependencias Python del PDK ---
+    if [ -f "$PDK_DIR/requirements.txt" ]; then
+        pip3 install -r "$PDK_DIR/requirements.txt" --break-system-packages \
+            || warn "Algunas dependencias Python fallaron (no siempre es critico)."
+    fi
+}
+
+# =============================================================================
+paso_7_verilog_a() {
+    paso 7 "Compilando modelos Verilog-A (OSDI para NGSpice)"
+
+    [ -f "$ENV_FILE" ] && . "$ENV_FILE"
+
+    if ! command -v openvaf >/dev/null 2>&1; then
+        err "OpenVAF no esta instalado. Corre primero: ./setup.sh 5"
+        return 1
+    fi
+
+    local vadir="$PDK_ROOT/$PDK/libs.tech/verilog-a"
+    [ -d "$vadir" ] || { err "No existe $vadir (¿corriste el paso 6?)"; return 1; }
+
+    cd "$vadir" || return 1
+    chmod +x openvaf-compile-va.sh
+    # 'source' y no './' porque el script setea variables y crea el link a .spiceinit
+    # shellcheck source=/dev/null
+    source ./openvaf-compile-va.sh \
+        || { err "Fallo la compilacion Verilog-A."; return 1; }
+
+    if find "$PDK_ROOT/$PDK" -name 'psp103_nqs.osdi' | grep -q .; then
+        ok "psp103_nqs.osdi generado correctamente."
+    else
+        warn "No se encontro psp103_nqs.osdi. Los MOSFET no van a simular."
+    fi
+    [ -f "$HOME/.spiceinit" ] && ok ".spiceinit enlazado en el home."
+}
+
+# =============================================================================
+verificar() {
+    paso "V" "Verificacion final"
+
+    [ -f "$ENV_FILE" ] && . "$ENV_FILE"
+
+    local fallos=0
+    for t in git python3 ngspice klayout xschem magic netgen openvaf; do
+        if command -v "$t" >/dev/null 2>&1; then
+            printf "  %-10s %s\n" "$t" "$(command -v "$t")"
+        else
+            printf "  %-10s ${RED}NO ENCONTRADO${RST}\n" "$t"
+            fallos=$((fallos+1))
+        fi
+    done
+
+    echo
+    echo "PDK_ROOT = ${PDK_ROOT:-(sin definir)}"
+    echo "PDK      = ${PDK:-(sin definir)}"
+    [ -d "${PDK_ROOT:-/nonexistent}/${PDK:-x}" ] && ok "PDK presente." || { err "PDK ausente."; fallos=$((fallos+1)); }
+
+    find "${PDK_ROOT:-/nonexistent}" -name '*.osdi' 2>/dev/null | grep -q . \
+        && ok "Modelos OSDI compilados." || { warn "Faltan los .osdi (paso 7)."; fallos=$((fallos+1)); }
+
+    echo
+    if [ "$fallos" -eq 0 ]; then
+        echo "${GRN}Entorno VLSI verificado correctamente.${RST}"
+        echo "Probá la interfaz grafica con:  xschem &"
+    else
+        echo "${YEL}Quedaron $fallos puntos por resolver (ver arriba).${RST}"
+    fi
+}
+
+# =============================================================================
+main() {
+    local pasos=(paso_0_chequeos paso_1_dependencias paso_2_simuladores \
+                 paso_3_klayout paso_4_xschem paso_5_openvaf \
+                 paso_6_pdk paso_7_verilog_a)
+
+    if [ "${1:-}" = "verify" ]; then verificar; return; fi
+
+    local ini="${1:-0}" fin="${2:-7}"
+    [ -n "${1:-}" ] && [ -z "${2:-}" ] && fin="$ini"   # ./setup.sh 3 -> solo el 3
+
+    for i in $(seq "$ini" "$fin"); do
+        if ! "${pasos[$i]}"; then
+            echo
+            err "El paso $i fallo. Corregi y reintentá con:  ./setup.sh $i"
+            exit 1
+        fi
+    done
+
+    verificar
+    echo
+    echo "${GRN}CERRA esta terminal y abrila de nuevo para cargar las variables.${RST}"
+}
+
+main "$@"
