@@ -1,0 +1,6 @@
+# Finales de linea segun plataforma de destino.
+# Sin esto, editar el .sh desde Windows lo sube con CRLF y bash falla
+# con el error "$'\r': command not found" en la maquina de los alumnos.
+*.sh    text eol=lf
+*.ps1   text eol=crlf
+*.md    text
