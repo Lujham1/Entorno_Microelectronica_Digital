@@ -205,6 +205,71 @@ Si eso no abre, actualizá WSL con `wsl --update` desde PowerShell.
 
 ---
 
+## Atajos de teclado en KLayout (opcional)
+
+KLayout trae su propio esquema de atajos, distinto al de Cadence Virtuoso o
+Synopsys Custom Compiler. Si venís de esas herramientas —o pensás usarlas más
+adelante— puede resultarte cómodo reasignar algunas teclas.
+
+**Esto es opcional y personal.** El entorno funciona perfectamente con los
+atajos por defecto. Lo dejamos documentado como referencia, no como algo que
+haya que hacer.
+
+Se configuran en **File → Setup → Application → Key Bindings**.
+
+> Para que las herramientas de edición estén disponibles, abrí KLayout en modo
+> editor: `klayout -e &`
+
+### Creación
+
+| Virtuoso | Acción en KLayout |
+|----------|-------------------|
+| `i` | Instance |
+| `r` | Box |
+| `p` | Path |
+| `Shift+P` | Polygon |
+| `l` | Text |
+| `k` | Ruler |
+| `Shift+K` | Clear Rulers |
+
+### Edición
+
+| Virtuoso | Acción en KLayout |
+|----------|-------------------|
+| `s` | Partial Edit |
+| `m` | Move |
+| `c` | Copy |
+| `q` | Properties |
+| `Shift+M` | Merge |
+| `Del` | Delete *(ya coincide)* |
+
+### Vista y jerarquía
+
+| Virtuoso | Acción en KLayout |
+|----------|-------------------|
+| `f` | Zoom Fit |
+| `Shift+Z` | Zoom Out |
+| `x` | Descend into cell |
+| `b` | Ascend |
+| `Ctrl+F` | Show top level only |
+| `Shift+F` | Show full hierarchy |
+
+### Consejos
+
+- **Empezá con pocas.** Las siete más usadas son `i`, `r`, `p`, `l`, `f`, `x` y
+  `b`. Reasignar veinte teclas de una genera conflictos difíciles de desenredar.
+- **KLayout va a avisarte de colisiones**: varias de esas teclas ya tienen una
+  función asignada. Revisá qué estás pisando antes de confirmar.
+- **No todo tiene equivalente.** KLayout tiene acciones que Virtuoso no tiene y
+  viceversa; el mapeo nunca es exacto.
+- **Tu configuración se guarda en `~/.klayout/klayoutrc`.** Si querés llevarla a
+  otra máquina, copiá ese archivo.
+
+Como referencia adicional existe [`yrrapt/klayout_setup`](https://github.com/yrrapt/klayout_setup),
+un repositorio con un `klayoutrc` de atajos aproximados a Virtuoso.
+
+---
+
 ## Empezar de cero
 
 Si querés reinstalar todo desde el principio:
