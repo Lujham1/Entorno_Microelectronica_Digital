@@ -122,22 +122,40 @@ $ciBody = @"
 #cloud-config
 # Perfil de la distro '$DistroName'.
 # Tiene prioridad sobre cualquier default.user-data global.
+locale: en_US
 users:
   - name: $LinuxUser
     gecos: Entorno Microelectronica Digital
-    groups: [adm, dialout, cdrom, floppy, sudo, audio, dip, video, plugdev, netdev]
+    groups: [adm,dialout,cdrom,floppy,sudo,audio,dip,video,plugdev,netdev]
     sudo: ALL=(ALL) NOPASSWD:ALL
     shell: /bin/bash
-    lock_passwd: false
+    lock_passwd: true
 write_files:
   - path: /etc/wsl.conf
     append: true
     content: |
       [user]
       default=$LinuxUser
+packages:
+  - curl
 "@
-Set-Content -Path $ciFile -Value $ciBody -Encoding UTF8
+
+# CRITICO: cloud-init exige que el archivo empiece EXACTAMENTE con
+# "#cloud-config". Set-Content -Encoding UTF8 en PowerShell 5.1 agrega un BOM
+# (EF BB BF) que lo rompe en silencio. Y como es YAML, tambien necesita
+# finales de linea LF: los here-strings de PowerShell generan CRLF.
+$utf8NoBom = New-Object System.Text.UTF8Encoding $false
+[System.IO.File]::WriteAllText($ciFile, $ciBody.Replace("`r`n", "`n"), $utf8NoBom)
+
 Write-Host "Perfil escrito. Usuario Linux: $LinuxUser"
+
+# Verificacion inmediata: si el primer byte no es '#', algo salio mal
+$primerByte = [System.IO.File]::ReadAllBytes($ciFile)[0]
+if ($primerByte -ne 0x23) {
+    Write-Host "ADVERTENCIA: el archivo no empieza con '#'. cloud-init lo va a ignorar." -ForegroundColor Red
+} else {
+    Write-Host "Formato del perfil verificado (sin BOM)."
+}
 
 # --- [3] Instalar la distro --------------------------------------------------
 Write-Paso 3 "Instalando $DistroBase como '$DistroName'"
