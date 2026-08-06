@@ -180,11 +180,27 @@ Write-Paso 4 "Esperando la configuracion inicial"
 Write-Host "Creando el usuario y aplicando la configuracion..."
 wsl -d $DistroName -- cloud-init status --wait 2>&1 | Out-Host
 
+# CRITICO: cloud-init escribe /etc/wsl.conf, pero WSL lee ese archivo solo al
+# ARRANCAR la instancia. Como ya estaba corriendo, el usuario por defecto sigue
+# siendo root. Hay que terminarla para que el proximo arranque lo aplique.
+Write-Host "Reiniciando la distro para aplicar el usuario por defecto..."
+wsl --terminate $DistroName 2>$null | Out-Null
+Start-Sleep -Seconds 3
+
 $usuario = (wsl -d $DistroName -- whoami 2>$null)
 Write-Host "Usuario activo en la distro: $usuario"
+
 if ($usuario -notmatch $LinuxUser) {
-    Write-Host "AVISO: se esperaba '$LinuxUser'. Continuo igual." -ForegroundColor Yellow
+    Write-Host ""
+    Write-Host "ERROR: se esperaba '$LinuxUser' y se obtuvo '$usuario'." -ForegroundColor Red
+    Write-Host "Instalar como root dejaria todo en /root y el entorno no serviria." -ForegroundColor Red
+    Write-Host ""
+    Write-Host "Diagnostico:" -ForegroundColor Yellow
+    Write-Host "  wsl -d $DistroName -- cat /etc/wsl.conf" -ForegroundColor Yellow
+    Write-Host "  wsl -d $DistroName -- id $LinuxUser" -ForegroundColor Yellow
+    return
 }
+Write-Host "Usuario correcto." -ForegroundColor Green
 
 # --- [5] Instalar las herramientas ------------------------------------------
 Write-Paso 5 "Instalando las herramientas del curso"
